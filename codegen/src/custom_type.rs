@@ -1,5 +1,5 @@
-use proc_macro2::{Span, TokenStream};
-use quote::{quote, ToTokens};
+use proc_macro2::{Span, Ident, TokenStream, TokenTree};
+use quote::{format_ident, quote, ToTokens};
 use syn::{
     punctuated::Punctuated, spanned::Spanned, Data, DataStruct, DeriveInput, Expr, Field, Fields,
     MetaNameValue, Path, Token,
@@ -20,6 +20,7 @@ pub fn derive_custom_type_impl(input: DeriveInput) -> TokenStream {
     let type_name = input.ident;
     let mut display_name = quote! { stringify!(#type_name) };
     let mut field_accessors = Vec::new();
+    let mut shared_field_accessors = Vec::new();
     let mut extras = Vec::new();
     let mut errors = Vec::new();
 
@@ -80,7 +81,9 @@ pub fn derive_custom_type_impl(input: DeriveInput) -> TokenStream {
         }) => scan_fields(
             &f.named.iter().collect::<Vec<_>>(),
             &mut field_accessors,
+            &mut shared_field_accessors,
             &mut errors,
+            &type_name,
         ),
 
         // struct Foo(...);
@@ -90,7 +93,9 @@ pub fn derive_custom_type_impl(input: DeriveInput) -> TokenStream {
         }) => scan_fields(
             &f.unnamed.iter().collect::<Vec<_>>(),
             &mut field_accessors,
+            &mut shared_field_accessors,
             &mut errors,
+            &type_name,
         ),
 
         // struct Foo;
@@ -131,6 +136,8 @@ pub fn derive_custom_type_impl(input: DeriveInput) -> TokenStream {
         quote! { #method; }
     };
 
+    let newtype_ident = format_ident!("_RhaiNewtype{}", type_name);
+
     quote! {
         impl CustomType for #type_name {
             fn build(mut builder: TypeBuilder<Self>) {
@@ -140,10 +147,20 @@ pub fn derive_custom_type_impl(input: DeriveInput) -> TokenStream {
                 #(#extras(&mut builder);)*
             }
         }
+
+        #[derive(Clone)]
+        struct #newtype_ident(std::rc::Rc<std::cell::RefCell<#type_name>>);
+
+        impl CustomType for #newtype_ident {
+            fn build(mut builder: TypeBuilder<Self>) {
+                #register
+                #(#shared_field_accessors)*
+            }
+        }
     }
 }
 
-fn scan_fields(fields: &[&Field], accessors: &mut Vec<TokenStream>, errors: &mut Vec<TokenStream>) {
+fn scan_fields(fields: &[&Field], accessors: &mut Vec<TokenStream>, shared_accessors: &mut Vec<TokenStream>, errors: &mut Vec<TokenStream>, type_name: &Ident) {
     for (i, &field) in fields.iter().enumerate() {
         let mut map_name = None;
         let mut get_fn = None;
@@ -283,6 +300,25 @@ fn scan_fields(fields: &[&Field], accessors: &mut Vec<TokenStream>, errors: &mut
 
         let set = set_fn.unwrap_or_else(|| quote! { |obj: &mut Self, val| obj.#field_name = val });
         let name = map_name.unwrap_or_else(|| quote! { stringify!(#field_name) });
+
+        fn find_replace(find: &str, replace: &Ident, stream: &TokenStream) -> TokenStream {
+            stream.clone().into_iter().map(|it| match it {
+                TokenTree::Ident(x) if x == find => TokenTree::Ident(replace.clone()),
+                x => x,
+            }).collect()
+        }
+
+        shared_accessors.push({
+            let encap_get = find_replace("Self", type_name, &get);
+            let getter = quote! { |obj: &mut Self| (#encap_get)(&mut obj.0.borrow_mut()) };
+            if readonly {
+                quote! { builder.with_get(#name, #getter); }
+            } else {
+                let encap_set = find_replace("Self", type_name, &set);
+                let setter = quote! { |obj: &mut Self, val| (#encap_set)(&mut obj.0.borrow_mut(), val) };
+                quote! { builder.with_get_set(#name, #getter, #setter); }
+            }
+        });
 
         accessors.push({
             let method = if readonly {
