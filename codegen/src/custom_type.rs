@@ -1,4 +1,4 @@
-use proc_macro2::{Span, Ident, TokenStream, TokenTree};
+use proc_macro2::{Ident, Span, TokenStream, TokenTree};
 use quote::{format_ident, quote, ToTokens};
 use syn::{
     punctuated::Punctuated, spanned::Spanned, Data, DataStruct, DeriveInput, Expr, Field, Fields,
@@ -160,7 +160,13 @@ pub fn derive_custom_type_impl(input: DeriveInput) -> TokenStream {
     }
 }
 
-fn scan_fields(fields: &[&Field], accessors: &mut Vec<TokenStream>, shared_accessors: &mut Vec<TokenStream>, errors: &mut Vec<TokenStream>, type_name: &Ident) {
+fn scan_fields(
+    fields: &[&Field],
+    accessors: &mut Vec<TokenStream>,
+    shared_accessors: &mut Vec<TokenStream>,
+    errors: &mut Vec<TokenStream>,
+    type_name: &Ident,
+) {
     for (i, &field) in fields.iter().enumerate() {
         let mut map_name = None;
         let mut get_fn = None;
@@ -302,10 +308,14 @@ fn scan_fields(fields: &[&Field], accessors: &mut Vec<TokenStream>, shared_acces
         let name = map_name.unwrap_or_else(|| quote! { stringify!(#field_name) });
 
         fn find_replace(find: &str, replace: &Ident, stream: &TokenStream) -> TokenStream {
-            stream.clone().into_iter().map(|it| match it {
-                TokenTree::Ident(x) if x == find => TokenTree::Ident(replace.clone()),
-                x => x,
-            }).collect()
+            stream
+                .clone()
+                .into_iter()
+                .map(|it| match it {
+                    TokenTree::Ident(x) if x == find => TokenTree::Ident(replace.clone()),
+                    x => x,
+                })
+                .collect()
         }
 
         shared_accessors.push({
@@ -315,7 +325,8 @@ fn scan_fields(fields: &[&Field], accessors: &mut Vec<TokenStream>, shared_acces
                 quote! { builder.with_get(#name, #getter); }
             } else {
                 let encap_set = find_replace("Self", type_name, &set);
-                let setter = quote! { |obj: &mut Self, val| (#encap_set)(&mut obj.0.borrow_mut(), val) };
+                let setter =
+                    quote! { |obj: &mut Self, val| (#encap_set)(&mut obj.0.borrow_mut(), val) };
                 quote! { builder.with_get_set(#name, #getter, #setter); }
             }
         });
