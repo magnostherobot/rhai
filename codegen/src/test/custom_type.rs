@@ -92,6 +92,7 @@ mod custom_type_tests {
 mod custom_type_tests {
     use crate::test::assert_streams_eq;
     use quote::quote;
+    use rhai_codegen_internal::derive_custom_type_impl;
 
     #[test]
     fn test_custom_type_tuple_struct() {
@@ -111,7 +112,7 @@ mod custom_type_tests {
             );
         };
 
-        let result = crate::custom_type::derive_custom_type_impl(
+        let result = derive_custom_type_impl(
             syn::parse2::<syn::DeriveInput>(input).unwrap(),
         );
 
@@ -156,7 +157,7 @@ mod custom_type_tests {
             }
         };
 
-        let result = crate::custom_type::derive_custom_type_impl(
+        let result = derive_custom_type_impl(
             syn::parse2::<syn::DeriveInput>(input).unwrap(),
         );
 

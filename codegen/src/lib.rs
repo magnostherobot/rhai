@@ -32,12 +32,12 @@
 //! # }
 //! ```
 
+use rhai_codegen_internal::derive_custom_type_impl;
 use proc_macro::TokenStream;
 use quote::quote;
 use syn::{parse_macro_input, spanned::Spanned, DeriveInput};
 
 mod attrs;
-mod custom_type;
 mod function;
 mod module;
 mod register;
@@ -305,7 +305,7 @@ pub fn set_exported_global_fn(args: TokenStream) -> TokenStream {
 #[proc_macro_derive(CustomType, attributes(rhai_type,))]
 pub fn derive_custom_type(input: TokenStream) -> TokenStream {
     let input = parse_macro_input!(input as DeriveInput);
-    let expanded = custom_type::derive_custom_type_impl(input);
+    let expanded = derive_custom_type_impl(input);
     expanded.into()
 }
 

@@ -22,6 +22,7 @@ metadata = []
 proc-macro2 = "1.0.0"
 syn = { version = "2.0.0", features = ["full", "parsing", "printing", "proc-macro", "extra-traits"] }
 quote = "1.0.0"
+rhai_codegen_internal = { path = "internal" }
 
 [dev-dependencies]
 rhai = { path = "..", version = "1.17.0", features = ["metadata"] }
